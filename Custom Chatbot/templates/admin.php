@@ -1,1 +1,0 @@
-<h1>Chatbot Plugin</h1>
