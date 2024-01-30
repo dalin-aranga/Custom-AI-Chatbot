@@ -4,7 +4,7 @@
  * @package  ChatbotPlugin
  */
 
-
+ global $wpdb;
 
 class ChatbotChatgpt{
     public static function callAPi($user_input){
@@ -69,6 +69,6 @@ class ChatbotChatgpt{
             return $formatted_response;
         }
     }
-}
+
 
 ?>

@@ -1,78 +1,91 @@
-jQuery(document).ready(function($) {
-    $('#chatbot-icon').on('click', function() {
-        openChatWindow();
-    });
+class Chatbox {
+    constructor() {
+        this.args = {
+            openButton: document.querySelector('.chatbox__button'),
+            chatBox: document.querySelector('.chatbox__support'),
+            sendButton: document.querySelector('.send__button')
+        }
 
-    function openChatWindow() {
-        $('body').append(`
-        <div class="chat-modal">
-            <div class="chat-content">
-                <div class="chat-header">Virtual Assistant</div>
-                <div class="chat-body" id="chat-messages"></div>
-                <div class="chat-footer">
-                    <input type="text" id="user-input" placeholder="Type your message...">
-                    <button id="send-button">Send</button>
-                    <button class="close-chat">Close</button>
-                </div>
-            </div>
-        </div>
-    
-        `);
-
-        // Close chat button
-        $('.close-chat').on('click', function() {
-            $('.chat-modal').remove();
-        });
-
-        // Send button
-        $('#send-button').on('click', function() {
-            sendMessage();
-        });
-
-        // Handle Enter key press
-        $('#user-input').on('keypress', function(e) {
-            if (e.which === 13) {
-                sendMessage();
-            }
-        });
+        this.state = false;
+        this.messages = [];
     }
 
-function sendMessage() {
-        var userInput = $('#user-input').val();
-        if (userInput.trim() !== '') {
-            // Append user's message to the chat body
-            $('#chat-messages').append(`<div class="user-message">${userInput}</div>`);
-            
-            $.ajax({
-                type: 'POST',
-                url: chatbot_params.ajax_url, 
-                data: {
-                    action: 'process_user_input',
-                    user_input: userInput,
-                },
-                success: function (response) {
-                    console.log(response)
-                    var botResponse = response.data.bot_response;
-                    // Append the bot's response to the chat body
-                    $('#chat-messages').append(`<div class="bot-message">${botResponse}</div>`);
-                },
-                error: function(error) {
-                    console.error('Error sending user input:', error);
-                }
-            });
-            
-            // Clear the input field
-            $('#user-input').val('');
+    display() {
+        const {openButton, chatBox, sendButton} = this.args;
+
+        openButton.addEventListener('click', () => this.toggleState(chatBox))
+
+        sendButton.addEventListener('click', () => this.onSendButton(chatBox))
+
+        const node = chatBox.querySelector('input');
+        node.addEventListener("keyup", ({key}) => {
+            if (key === "Enter") {
+                this.onSendButton(chatBox)
+            }
+        })
+    }
+
+    toggleState(chatbox) {
+        this.state = !this.state;
+
+        // show or hides the box
+        if(this.state) {
+            chatbox.classList.add('chatbox--active')
+        } else {
+            chatbox.classList.remove('chatbox--active')
         }
     }
-});
 
+    onSendButton(chatbox) {
+        var textField = chatbox.querySelector('input');
+        let text1 = textField.value
+        if (text1 === "") {
+            return;
+        }
 
+        let msg1 = { name: "User", message: text1 }
+        this.messages.push(msg1);
 
-// Add the following code at the end to close the chat on clicking outside the modal
-$(document).on('click', function(e) {
-    if (!$(e.target).closest('.chat-modal').length && !$(e.target).is('#chatbot-icon')) {
-        $('.chat-modal').remove();
+        fetch('http://127.0.0.1:5000/predict', {
+            method: 'POST',
+            body: JSON.stringify({ message: text1 }),
+            mode: 'cors',
+            headers: {
+              'Content-Type': 'application/json'
+            },
+          })
+          .then(r => r.json())
+          .then(r => {
+            let msg2 = { name: "Sam", message: r.answer };
+            this.messages.push(msg2);
+            this.updateChatText(chatbox)
+            textField.value = ''
+
+        }).catch((error) => {
+            console.error('Error:', error);
+            this.updateChatText(chatbox)
+            textField.value = ''
+          });
     }
-});
 
+    updateChatText(chatbox) {
+        var html = '';
+        this.messages.slice().reverse().forEach(function(item, index) {
+            if (item.name === "Sam")
+            {
+                html += '<div class="messages__item messages__item--visitor">' + item.message + '</div>'
+            }
+            else
+            {
+                html += '<div class="messages__item messages__item--operator">' + item.message + '</div>'
+            }
+          });
+
+        const chatmessage = chatbox.querySelector('.chatbox__messages');
+        chatmessage.innerHTML = html;
+    }
+}
+
+
+const chatbox = new Chatbox();
+chatbox.display();
