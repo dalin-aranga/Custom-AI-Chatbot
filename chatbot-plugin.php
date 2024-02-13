@@ -23,16 +23,15 @@ if ( !class_exists( 'ChatBotPlugin' ) ) {
             // Register activation, deactivation, and uninstall hooks
             register_activation_hook(__FILE__, array($this, 'activate'));
             register_deactivation_hook(__FILE__, array($this, 'deactivate'));
-            register_uninstall_hook(__FILE__, array($this, 'uninstall'));
+            register_uninstall_hook(__FILE__,'uninstall');
             
 
             // Enqueue styles and scripts
             add_action('wp_enqueue_scripts', array($this, 'enqueueScripts'));
 
-            add_action('wp_ajax_process_user_input', 'process_user_input');
-            add_action('wp_ajax_nopriv_process_user_input', 'process_user_input');
             add_action('wp_ajax_process_user_input', array($this, 'process_user_input'));
-            add_action('wp_ajax_nopriv_process_user_input', array($this, 'process_user_input'));
+            add_action('wp_ajax_nopriv_process_user_input',  array($this, 'process_user_input'));
+
 
             // Add chatbot icon to the footer
             add_action('wp_footer', array($this, 'addIcon'));
@@ -41,23 +40,27 @@ if ( !class_exists( 'ChatBotPlugin' ) ) {
             //Capture base URL
             add_action('wp_get_base_url', array($this, 'get_base_url'));
 
-
-
-
-
+            
             // Custom Cron Job
             add_filter( 'cron_schedules', array( $this, 'custom_every_three_hours_schedule' ) );
-            add_action( 'custom_every_three_hours_event', array( $this, 'custom_every_three_hours_cronjob' ) );
+            add_action('init', array($this, 'schedule_cron'));
+            
 
         }
 
+        //cron shedule.
+        public function schedule_cron() {
+            if (!wp_next_scheduled('custom_every_three_hours_event')) {
+                wp_schedule_event(time(), 'everythreehours', 'custom_every_three_hours_event');
+            }
+        }
+
         public function process_user_input() {
+         
             $user_input = sanitize_text_field($_POST['user_input']);
-        
             // Call your API function with the user input
             require_once plugin_dir_path(__FILE__) . '/chatbot-api/chatbot-chatgpt.php';
-            $bot_response = ChatbotChatgpt::callAPI($user_input);
-        
+            $bot_response = ChatbotChatgpt::callAPi($user_input);
             wp_send_json_success(array('bot_response' => $bot_response));
         }
         public function settings_link( $links ) {
@@ -67,7 +70,7 @@ if ( !class_exists( 'ChatBotPlugin' ) ) {
 		}
         public static function get_base_url(){
             $site_url = home_url();
-            $site_url = 'http://defyndigitadev.wpengine.com/';
+            $site_url = 'http://www.example.com/';
 
             return $site_url;
         }
@@ -77,10 +80,46 @@ if ( !class_exists( 'ChatBotPlugin' ) ) {
 			return $links;
 		}
 
+        //Database update
+
         // Activate plugin
         public function activate() {
             require_once plugin_dir_path(__FILE__) . '/inc/chatbot-plugin-activation.php';
             ChatbotPluginActivation::activation();
+
+            global $wpdb;
+            $table_name = $wpdb->prefix . 'webdata001';
+    
+            $sql = "CREATE TABLE $table_name (
+                id INT NOT NULL AUTO_INCREMENT,
+                uniq_url VARCHAR(255) NOT NULL,
+                web_content TEXT NOT NULL,
+                PRIMARY KEY (id)
+            ) ";
+    
+        require_once(ABSPATH . 'wp-admin/includes/upgrade.php');
+        dbDelta($sql);
+
+        function custom_every_three_hours_cronjob() {
+            global $wpdb;
+            $table_name = $wpdb->prefix . 'webdata001';
+            $base_url = "https://defyndigitadev.wpenginepowered.com/";
+            require_once plugin_dir_path(__FILE__) . '/chatbot-api/chatbot_webcontent_extract.php';
+            $htmlContent = ChatbotWebContentExtract::fetdata($base_url);
+        
+            if ($htmlContent) {
+                $data = array(
+                    'uniq_url'     => $base_url,
+                    'web_content'  => $htmlContent,
+                );
+        
+                $wpdb->insert($table_name, $data);
+            } else {
+                error_log('Failed to fetch web data from ' . $base_url);
+            }
+        }
+        custom_every_three_hours_cronjob();
+
         }
 
        // Deactivate plugin
@@ -88,11 +127,18 @@ if ( !class_exists( 'ChatBotPlugin' ) ) {
             require_once plugin_dir_path(__FILE__) . '/inc/chatbot-plugin-deactivation.php';
             ChatbotPluginDeactivation::deactivation();
         }
+        
 
+        public static function uninstall() {
+            require_once plugin_dir_path(__FILE__) . 'chatbot-uninstall.php';
+            ChatbotPluginUninstall::uninstall();
+        }
         // Enqueue scripts and styles
         public function enqueueScripts() {
             wp_enqueue_style('chatbot-styles', plugins_url('/assets/css/style.css', __FILE__));
             wp_enqueue_script('chatbot-script', plugins_url('/assets/js/script.js', __FILE__), array('jquery'), null, true);
+
+
             
             // Newly added Ajax request. Future use only js
             wp_localize_script('chatbot-script', 'chatbot_params', array('ajax_url' => admin_url('admin-ajax.php'),));
@@ -111,18 +157,10 @@ if ( !class_exists( 'ChatBotPlugin' ) ) {
         public function addIcon() {
             ?>
             <div id="chatbot-icon">
-                <img src="<?php echo plugins_url('/assets/images/chatbot-icon.png', __FILE__); ?>" alt="ChatBot Icon">
+            <img src="<?php echo plugins_url('/assets/images/chatbot-icon.png', __FILE__); ?>" alt="ChatBot Icon">
             </div>
             <?php
         }
-    }
-
-
-
-
-
-
-
 
     // Custom Cron Job
     public function custom_every_three_hours_schedule( $schedules ) {
@@ -136,63 +174,7 @@ if ( !class_exists( 'ChatBotPlugin' ) ) {
 
 
 
-
-    public function custom_every_three_hours_cronjob() {
-        // Include WordPress database connection
-        global $wpdb;
-
-        $externalData = $this->get_external_data_source_link();
-
-        $sourceLink = $externalData['source_link'];
-        $content = $externalData['content'];
-        $singleOrMultiple = $externalData['single_or_multiple'];
-       
-
-        $data_to_insert = array(
-            'source_link' => $sourceLink,
-            'content'     => $content,
-            'single_or_multiple'      => $singleOrMultiple,
-        );
-
-
-        // Replace 'your_table_name' with the actual table name you want to use
-        $table_name = $wpdb->prefix . 'extracted_data';
-
-        // Insert data into the database
-        $wpdb->insert(
-            $table_name,
-            $data_to_insert
-        );
-
-
-        // Log the cron job execution time
-        error_log( 'Cron job executed at: ' . date( 'Y-m-d H:i:s', time() ) );
-        add_option( 'custom_crone_run_at', date( 'Y-m-d H:i:s', time() ) );
-    }
-
-
-    // Sample functions to get data from external_data.php
-    public function get_external_data_source_link() {
-        $script = __DIR__ . DIRECTORY_SEPARATOR . "extract_data.py";
-        $result = shell_exec("python $script");
-        $resultArray = json_decode($result, true);
-
-        $sourceLink = key($resultArray[0]); 
-        $content = current($resultArray[0]); 
-        $singleOrMultiple = $resultArray[1];
-
-        $data_to_return = array(
-            'source_link' => $sourceLink,
-            'content' => $content,
-            'single_or_multiple' => $singleOrMultiple,
-        );
-
-
-        return  $data_to_return;
-    }
-
-
-
+  }
     // Instantiate the plugin class
     $chatBotPlugin = new ChatBotPlugin();
 

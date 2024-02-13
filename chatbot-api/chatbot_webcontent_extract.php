@@ -12,18 +12,20 @@ class ChatbotWebContentExtract{
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
         $html = curl_exec($ch);
         curl_close($ch);
-    
-        // point to the body, then get the innertext
-        $data = str_get_html($html)->find('body', 0)->innertext;
-    
+        $htmlObject = str_get_html($html);
+
+        if ($htmlObject) {
+            $data = $htmlObject->find('body', 0)->innertext;
+            $plaintext = strip_tags($data);
+            return $plaintext;
+        } else {
+            // Handle the case where HTML parsing fails
+            return "Error parsing HTML";
+        }
+            
         // remove HTML tags
         $plaintext = strip_tags($data);
         return $plaintext;
     }
 }
-
-$obj = new ChatbotWebContentExtract();
-$content= $obj->fetdata("https://defyndigitadev.wpenginepowered.com/"); 
-echo $content;
-
 ?>
